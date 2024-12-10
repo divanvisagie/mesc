@@ -1,22 +1,44 @@
 use std::process::Command;
 use serde_json::json;
 use shell_words;
+use clap::{Command as ClapCommand, Arg, ArgAction};
+use serde_yaml;
 
 const COMMAND_DELIMITER: &str = ",";
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let matches = ClapCommand::new("Command Executor")
+        .version("1.0")
+        .author("Divan")
+        .about("Executes commands and formats output")
+        .arg(
+            Arg::new("commands")
+                .help("Comma-separated commands to execute")
+                .required(true),
+        )
+        .arg(
+            Arg::new("yaml")
+                .long("yaml")
+                .help("Output results in YAML format")
+                .action(ArgAction::SetTrue),
+        )
+        .get_matches();
 
-    if args.is_empty() {
+    let raw_commands = matches.get_one::<String>("commands").expect("Commands required");
+    let use_yaml = matches.get_flag("yaml");
+
+    let commands: Vec<String> = raw_commands
+        .split(COMMAND_DELIMITER)
+        .map(|cmd| cmd.trim().to_string())
+        .filter(|cmd| !cmd.is_empty())
+        .collect();
+
+    if commands.is_empty() {
         eprintln!("Error: No commands provided.");
         return;
     }
 
     let mut messages = Vec::new();
-
-    // Split arguments into separate commands by a delimiter (e.g., `,`)
-    let joined_args = args.join(" ");
-    let commands: Vec<String> = joined_args.split(COMMAND_DELIMITER).map(|cmd| cmd.trim().to_string()).filter(|cmd| !cmd.is_empty()).collect();
 
     for command in commands {
         match execute_command(&command) {
@@ -43,9 +65,16 @@ fn main() {
         }
     }
 
-    match serde_json::to_string_pretty(&json!(messages)) {
-        Ok(chat_context) => println!("{}", chat_context),
-        Err(e) => eprintln!("Error serializing JSON: {}", e),
+    if use_yaml {
+        match serde_yaml::to_string(&messages) {
+            Ok(yaml_output) => println!("{}", yaml_output),
+            Err(e) => eprintln!("Error serializing YAML: {}", e),
+        }
+    } else {
+        match serde_json::to_string_pretty(&json!(messages)) {
+            Ok(chat_context) => println!("{}", chat_context),
+            Err(e) => eprintln!("Error serializing JSON: {}", e),
+        }
     }
 }
 
